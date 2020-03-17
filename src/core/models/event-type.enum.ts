@@ -1,14 +1,13 @@
 export enum EventTypeEnum {
   HEARTBEAT_CHECK = 'heartbeat',
 
-  PROJECT_JOIN = 'projectJoin',
-  PROJECT_LEAVE = 'projectLeave',
-  PROJECT_LOCK = 'projectLock',
-  PROJECT_UNLOCK = 'projectUnlock',
-  PROJECT_UPDATE_STATE = 'projectUpdateState',
-  PROJECT_UNLOCK_ALL_FIELDS = 'projectUnlockAllFields',
-  PROJECT_NOTIFY_NON_ACTIVE_CONTRIBUTOR = 'projectNotifyNonActiveContributors',
-
+  RESOURCE_JOIN = 'resourceJoin',
+  RESOURCE_LEAVE = 'resourceLeave',
+  RESOURCE_LOCK = 'resourceLock',
+  RESOURCE_UNLOCK = 'resourceUnlock',
+  RESOURCE_UPDATE_STATE = 'resourceUpdateState',
+  RESOURCE_UNLOCK_ALL_FIELDS = 'resourceUnlockAllFields',
+  RESOURCE_NOTIFY_NON_ACTIVE_CONTRIBUTOR = 'resourceNotifyNonActiveContributors',
 
 
 }

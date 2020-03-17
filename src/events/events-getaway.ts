@@ -10,15 +10,15 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { ProjectUnlock } from 'src/core/models/project-unlock.model';
-import { ProjectUpdateState } from 'src/core/models/project-update-state.model';
+import { ResourceUnlock } from '../core/models/resource-unlock.model';
+import { ResourceUpdateState } from '../core/models/resource-update-state.model';
+import { KvStoreService } from '../services/kv-store.service';
 import { Contributor, FieldCode } from './../core/models/contributor.model';
 import { EventTypeEnum } from './../core/models/event-type.enum';
-import { ProjectJoin } from './../core/models/project-join.model';
-import { ProjectLeave } from './../core/models/project-leave.model';
-import { ProjectLock } from './../core/models/project-lock.model';
-import { ProjectUnlockAllFields } from './../core/models/project-unlock-all-fields.model';
-import { KvStoreService } from './../services/kv-store.service';
+import { ResourceJoin } from './../core/models/resource-join.model';
+import { ResourceLeave } from './../core/models/resource-leave.model';
+import { ResourceLock } from './../core/models/resource-lock.model';
+import { ResourceUnlockAllFields } from './../core/models/resource-unlock-all-fields.model';
 import { WsJwtGuard } from './guards/ws-jwt.guard';
 
 @UseGuards(WsJwtGuard)
@@ -43,12 +43,12 @@ export class EventsGateway
   async handleDisconnect(socket: Socket): Promise<void> {
     Logger.error(`Contributor with socket id ${socket.id} disconnected`);
 
-    const projectId = await this.kvStore.get(socket.id);
-    if (!projectId) {
+    const resourceId = await this.kvStore.get(socket.id);
+    if (!resourceId) {
       return;
     }
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
     const indexOf = contributors.findIndex(val => val.socketId === socket.id);
     if (indexOf !== -1) {
@@ -56,44 +56,46 @@ export class EventsGateway
       contributors.splice(indexOf, 1);
 
       // Save contributors to store
-      await this.kvStore.storeObject(projectId, contributors);
+      await this.kvStore.storeObject(resourceId, contributors);
 
       // Remove disconnected socket from store
       await this.kvStore.remove(socket.id);
 
-      this.server.to(projectId).emit(EventTypeEnum.PROJECT_LEAVE, contributors);
+      this.server
+        .to(resourceId)
+        .emit(EventTypeEnum.RESOURCE_LEAVE, contributors);
     }
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_JOIN)
-  async projectJoin(
-    @MessageBody() data: ProjectJoin,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_JOIN)
+  async resourceJoin(
+    @MessageBody() data: ResourceJoin,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
     Logger.log(
-      `Contributor ${data.contributor.id} joined project ${data.projectId}`,
+      `Contributor ${data.contributor.id} joined resource ${data.resourceId}`
     );
-    const projectId = data.projectId;
+    const resourceId = data.resourceId;
 
-    socket.join(projectId);
+    socket.join(resourceId);
     // Save socket to store
-    await this.kvStore.set(socket.id, projectId);
+    await this.kvStore.set(socket.id, resourceId);
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
 
     // Set Global user data
     const indexOf = contributors.findIndex(
-      value => value.id === data.contributor.id,
+      value => value.id === data.contributor.id
     );
 
     // TODO Check if user has already state open
     if (indexOf !== -1) {
       contributors[indexOf].id = data.contributor.id;
       contributors[indexOf].socketId = socket.id;
-      contributors[indexOf].projectId = projectId;
+      contributors[indexOf].resourceId = resourceId;
       contributors[indexOf].name = data.contributor.name;
       contributors[indexOf].lastHeartBeatOccurredAt = Date.now();
     } else {
@@ -101,69 +103,69 @@ export class EventsGateway
         id: data.contributor.id,
         socketId: socket.id,
         name: data.contributor.name,
-        projectId,
+        resourceId,
         lastHeartBeatOccurredAt: Date.now(),
       } as any);
     }
 
     // Save contributors to store
-    await this.kvStore.storeObject(projectId, contributors);
+    await this.kvStore.storeObject(resourceId, contributors);
 
     // Notify all clients in room
-    this.server.to(projectId).emit(EventTypeEnum.PROJECT_JOIN, contributors);
+    this.server.to(resourceId).emit(EventTypeEnum.RESOURCE_JOIN, contributors);
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_LEAVE)
-  async projectLeave(
-    @MessageBody() data: ProjectLeave,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_LEAVE)
+  async resourceLeave(
+    @MessageBody() data: ResourceLeave,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
     Logger.log(
-      `Contributor ${data.contributor.id} leave project ${data.projectId}`,
+      `Contributor ${data.contributor.id} leave resource ${data.resourceId}`
     );
-    const projectId = data.projectId;
+    const resourceId = data.resourceId;
 
-    socket.leave(projectId);
+    socket.leave(resourceId);
     // Remove socket from store
     await this.kvStore.remove(socket.id);
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
 
     // Set Global user data
     const indexOf = contributors.findIndex(
-      value => value.id === data.contributor.id,
+      value => value.id === data.contributor.id
     );
     // FIXME Remove user or should be socket (eg. User can be in multiple browsers)
     contributors.splice(indexOf, 1);
 
     // Save contributors to store
-    await this.kvStore.storeObject(projectId, contributors);
+    await this.kvStore.storeObject(resourceId, contributors);
 
     // Notify all clients
-    this.server.to(projectId).emit(EventTypeEnum.PROJECT_LEAVE, contributors);
+    this.server.to(resourceId).emit(EventTypeEnum.RESOURCE_LEAVE, contributors);
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_LOCK)
-  async projectLock(
-    @MessageBody() data: ProjectLock,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_LOCK)
+  async resourceLock(
+    @MessageBody() data: ResourceLock,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
     Logger.log(
-      `Contributor ${data.contributor.id} has locked ${data.fieldCode}`,
+      `Contributor ${data.contributor.id} has locked ${data.fieldCode}`
     );
-    const projectId = data.projectId;
+    const resourceId = data.resourceId;
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
 
     // Set lock
     const indexOfContributor = contributors.findIndex(
-      value => value.id === data.contributor.id,
+      value => value.id === data.contributor.id
     );
 
     if (indexOfContributor !== -1) {
@@ -185,25 +187,25 @@ export class EventsGateway
     }
 
     // Save contributors to store
-    await this.kvStore.storeObject(projectId, contributors);
+    await this.kvStore.storeObject(resourceId, contributors);
 
     // Notify all clients
-    this.server.to(projectId).emit(EventTypeEnum.PROJECT_LOCK, contributors);
+    this.server.to(resourceId).emit(EventTypeEnum.RESOURCE_LOCK, contributors);
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_UNLOCK)
-  async projectUnlock(
-    @MessageBody() data: ProjectUnlock,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_UNLOCK)
+  async resourceUnlock(
+    @MessageBody() data: ResourceUnlock,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
-    const projectId = data.projectId;
+    const resourceId = data.resourceId;
     Logger.log(
-      `Contributor ${data.user.id} unlocked ${data.fieldCode} in ${projectId}`,
+      `Contributor ${data.user.id} unlocked ${data.fieldCode} in ${resourceId}`
     );
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
     if (!contributors) {
       return;
@@ -211,7 +213,7 @@ export class EventsGateway
 
     // Release lock
     const indexOfContributor = contributors.findIndex(
-      value => value.id === data.user.id,
+      value => value.id === data.user.id
     );
     if (indexOfContributor !== -1) {
       contributors[indexOfContributor].lastHeartBeatOccurredAt = Date.now();
@@ -231,32 +233,34 @@ export class EventsGateway
     }
 
     // Save contributors to store
-    await this.kvStore.storeObject(projectId, contributors);
+    await this.kvStore.storeObject(resourceId, contributors);
 
     // Notify all clients
     Logger.log(
       `Emit ${
-        EventTypeEnum.PROJECT_UNLOCK
-      } event to contributors in ${projectId}, contributors: ${JSON.stringify(
-        contributors,
-      )}`,
+        EventTypeEnum.RESOURCE_UNLOCK
+      } event to contributors in ${resourceId}, contributors: ${JSON.stringify(
+        contributors
+      )}`
     );
-    this.server.to(projectId).emit(EventTypeEnum.PROJECT_UNLOCK, contributors);
+    this.server
+      .to(resourceId)
+      .emit(EventTypeEnum.RESOURCE_UNLOCK, contributors);
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_UNLOCK_ALL_FIELDS)
-  async projectUnlockAllFields(
-    @MessageBody() data: ProjectUnlockAllFields,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_UNLOCK_ALL_FIELDS)
+  async resourceUnlockAllFields(
+    @MessageBody() data: ResourceUnlockAllFields,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
-    const projectId = data.projectId;
+    const resourceId = data.resourceId;
     Logger.log(
-      `Contributor ${data.contributor.id} unlocked all fields in ${projectId}`,
+      `Contributor ${data.contributor.id} unlocked all fields in ${resourceId}`
     );
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
     if (!contributors) {
       return;
@@ -264,7 +268,7 @@ export class EventsGateway
 
     // Release all fields lock
     const indexOfContributor = contributors.findIndex(
-      value => value.id === data.contributor.id,
+      value => value.id === data.contributor.id
     );
 
     if (indexOfContributor !== -1) {
@@ -275,61 +279,61 @@ export class EventsGateway
     }
 
     // Save contributors to store
-    await this.kvStore.storeObject(projectId, contributors);
+    await this.kvStore.storeObject(resourceId, contributors);
 
     // Notify all clients
     Logger.log(
       `Emit ${
-        EventTypeEnum.PROJECT_UNLOCK_ALL_FIELDS
-      } event to contributors in ${projectId}, contributors: ${JSON.stringify(
-        contributors,
-      )}`,
+        EventTypeEnum.RESOURCE_UNLOCK_ALL_FIELDS
+      } event to contributors in ${resourceId}, contributors: ${JSON.stringify(
+        contributors
+      )}`
     );
     this.server
-      .to(projectId)
-      .emit(EventTypeEnum.PROJECT_UNLOCK_ALL_FIELDS, contributors);
+      .to(resourceId)
+      .emit(EventTypeEnum.RESOURCE_UNLOCK_ALL_FIELDS, contributors);
   }
 
-  @SubscribeMessage(EventTypeEnum.PROJECT_UPDATE_STATE)
-  async projectUpdateState(
-    @MessageBody() projectUpdateState: ProjectUpdateState,
-    @ConnectedSocket() socket: Socket,
+  @SubscribeMessage(EventTypeEnum.RESOURCE_UPDATE_STATE)
+  async resourceUpdateState(
+    @MessageBody() resourceUpdateState: ResourceUpdateState,
+    @ConnectedSocket() socket: Socket
   ): Promise<void> {
-    const projectId = projectUpdateState.projectId;
+    const resourceId = resourceUpdateState.resourceId;
     Logger.log(
-      `Contributor ${projectUpdateState.user.id} updated state in ${projectId}`,
+      `Contributor ${resourceUpdateState.user.id} updated state in ${resourceId}`
     );
 
     // Retrieve contributors from store
     const contributors: Contributor[] = this._notifyAndRemoveNonActiveContributors(
-      (await this.kvStore.getObject(projectId)) || [],
+      (await this.kvStore.getObject(resourceId)) || []
     );
 
     // Notify all clients
     Logger.log(
       `Emit ${
-        EventTypeEnum.PROJECT_UPDATE_STATE
-      } event to contributors in ${projectId}, contributors: ${JSON.stringify(
-        contributors,
-      )}`,
+        EventTypeEnum.RESOURCE_UPDATE_STATE
+      } event to contributors in ${resourceId}, contributors: ${JSON.stringify(
+        contributors
+      )}`
     );
     this.server
-      .to(projectId)
-      .emit(EventTypeEnum.PROJECT_UPDATE_STATE, projectUpdateState);
+      .to(resourceId)
+      .emit(EventTypeEnum.RESOURCE_UPDATE_STATE, resourceUpdateState);
   }
 
   private _isContributorAlreadyLockedField(
     contributors: Contributor[],
-    projectLock: ProjectLock,
+    resourceLock: ResourceLock
   ): boolean {
     for (const contributor of contributors) {
       // Check if contributor has field code & if is locked
       if (
-        contributor.projectId === projectLock.projectId &&
+        contributor.resourceId === resourceLock.resourceId &&
         contributor.fieldCodes &&
         contributor.fieldCodes.findIndex(
           fieldCode =>
-            fieldCode.fieldCode === projectLock.fieldCode && fieldCode.isLocked,
+            fieldCode.fieldCode === resourceLock.fieldCode && fieldCode.isLocked
         ) !== -1
       ) {
         return true;
@@ -339,15 +343,15 @@ export class EventsGateway
   }
 
   private _notifyAndRemoveNonActiveContributors(
-    contributors: Contributor[],
+    contributors: Contributor[]
   ): Contributor[] {
     const minimalThresholdForInactivity =
       Date.now() - this.MAX_HEARTBEAT_BEFORE_FLAGGED_AS_NON_ACTIVE;
     const nonActiveContributors = contributors.filter(
-      value => value.lastHeartBeatOccurredAt < minimalThresholdForInactivity,
+      value => value.lastHeartBeatOccurredAt < minimalThresholdForInactivity
     );
     const stillActiveContributors = contributors.filter(
-      value => value.lastHeartBeatOccurredAt >= minimalThresholdForInactivity,
+      value => value.lastHeartBeatOccurredAt >= minimalThresholdForInactivity
     );
 
     if (nonActiveContributors.length) {
@@ -357,8 +361,8 @@ export class EventsGateway
           this.server
             .clients()
             .sockets[nonActive.socketId].emit(
-              EventTypeEnum.PROJECT_NOTIFY_NON_ACTIVE_CONTRIBUTOR,
-              nonActive,
+              EventTypeEnum.RESOURCE_NOTIFY_NON_ACTIVE_CONTRIBUTOR,
+              nonActive
             );
         }
       }

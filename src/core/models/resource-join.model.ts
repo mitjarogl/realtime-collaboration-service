@@ -1,8 +1,8 @@
 import {Contributor} from '../models/contributor.model';
 
-export class ProjectJoin {
+export class ResourceJoin {
   contributor: Contributor;
-  projectId: string;
+  resourceId: string;
 
   // Response list of locked fields and users
 }

@@ -1,6 +1,6 @@
 import {Contributor} from './contributor.model';
 
-export class ProjectLeave {
+export class ResourceLeave {
   contributor: Contributor;
-  projectId: string;
+  resourceId: string;
 }

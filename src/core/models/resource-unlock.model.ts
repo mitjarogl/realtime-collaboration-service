@@ -1,9 +1,9 @@
 import { Contributor } from './contributor.model';
 
 
-export class ProjectUnlock {
+export class ResourceUnlock {
   user: Partial<Contributor>;
-  projectId: string;
+  resourceId: string;
   fieldCode: string;
   changes?: any;
 }

@@ -1,7 +1,7 @@
 import { Contributor } from './contributor.model';
 
-export class ProjectLock {
+export class ResourceLock {
   contributor: Partial<Contributor>;
-  projectId: string;
+  resourceId: string;
   fieldCode: string;
 }

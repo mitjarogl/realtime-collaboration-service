@@ -1,6 +1,6 @@
 import { Contributor } from './contributor.model';
 
-export class ProjectUnlockAllFields {
+export class ResourceUnlockAllFields {
   contributor: Partial<Contributor>;
-  projectId: string;
+  resourceId: string;
 }

@@ -2,8 +2,8 @@ import { Contributor } from './contributor.model';
 
 
 
-export class ProjectUpdateState {
+export class ResourceUpdateState {
   user: Partial<Contributor>;
-  projectId: string;
+  resourceId: string;
   changes: any;
 }

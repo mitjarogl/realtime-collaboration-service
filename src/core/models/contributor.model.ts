@@ -3,11 +3,10 @@ export interface Contributor {
   name: string;
   email: string;
   image: string;
-  projectId: string;
+  resourceId: string;
   socketId: string;
   fieldCodes: FieldCode[];
   lastHeartBeatOccurredAt: number;
-
 }
 
 export class FieldCode {
@@ -15,4 +14,3 @@ export class FieldCode {
   changes: any;
   isLocked: boolean;
 }
-
